@@ -29,10 +29,13 @@ const userSchema = new mongoose.Schema({
   verificationToken: {
     type: String
   },
+  verificationTokenExpires: {
+    type: Date
+  },
   verificationOTP: {
     type: String
   },
-  verificationTokenExpires: {
+  verificationOTPExpires: {
     type: Date
   }
 }, { timestamps: true })

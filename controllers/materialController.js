@@ -1,5 +1,5 @@
 import Material from '../models/Material.js'
-import fs from 'fs'
+import cloudinary from 'cloudinary'
 
 // @desc Get all materials (with search and filter)
 // @route GET /api/materials
@@ -57,7 +57,7 @@ export const createMaterial = async (req, res) => {
     }
 
     const fileType = req.file.mimetype === 'application/pdf' ? 'pdf' : 'image'
-    const fileUrl = `/uploads/${req.file.filename}`
+    const fileUrl = req.file.path  // Cloudinary URL
 
     const material = await Material.create({
       title,
@@ -118,10 +118,9 @@ export const deleteMaterial = async (req, res) => {
       return res.status(403).json({ message: 'Not authorized to delete this material' })
     }
 
-    // Delete file from uploads folder
-    const filePath = `.${material.fileUrl}`
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath)
+    // Delete file from Cloudinary
+    if (req.file && req.file.filename) {
+      await cloudinary.v2.uploader.destroy(req.file.filename)
     }
 
     await material.deleteOne()
@@ -145,12 +144,10 @@ export const upvoteMaterial = async (req, res) => {
     const alreadyUpvoted = material.upvotes.includes(req.user._id)
 
     if (alreadyUpvoted) {
-      // Remove upvote
       material.upvotes = material.upvotes.filter(
         id => id.toString() !== req.user._id.toString()
       )
     } else {
-      // Add upvote
       material.upvotes.push(req.user._id)
     }
 

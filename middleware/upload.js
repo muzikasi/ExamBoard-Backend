@@ -1,14 +1,23 @@
 import multer from 'multer'
-import path from 'path'
+import { CloudinaryStorage } from 'multer-storage-cloudinary'
+import cloudinary from 'cloudinary'
+import dotenv from 'dotenv'
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, 'uploads/')
+dotenv.config()
+
+cloudinary.v2.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+})
+
+const storage = new CloudinaryStorage({
+  cloudinary: cloudinary.v2,
+  params: {
+    folder: 'examboard',
+    allowed_formats: ['jpg', 'jpeg', 'png', 'pdf'],
+    resource_type: 'auto',
   },
-  filename: (req, file, cb) => {
-    const uniqueName = `${Date.now()}-${Math.round(Math.random() * 1e9)}${path.extname(file.originalname)}`
-    cb(null, uniqueName)
-  }
 })
 
 const fileFilter = (req, file, cb) => {
@@ -23,7 +32,7 @@ const fileFilter = (req, file, cb) => {
 const upload = multer({
   storage,
   fileFilter,
-  limits: { fileSize: 7 * 1024 * 1024 } // 10MB max
+  limits: { fileSize: 7 * 1024 * 1024 }
 })
 
 export default upload

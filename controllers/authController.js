@@ -60,12 +60,18 @@ export const verifyEmail = async (req, res) => {
   try {
     const { token } = req.params
 
+    // First check if token exists and not expired
     const user = await User.findOne({
       verificationToken: token,
       verificationTokenExpires: { $gt: Date.now() }
     })
 
     if (!user) {
+      // Check if user is already verified with this token
+      const alreadyVerified = await User.findOne({ isVerified: true })
+      if (alreadyVerified) {
+        return res.json({ message: 'Email already verified! You can now login.' })
+      }
       return res.status(400).json({ message: 'Invalid or expired verification link' })
     }
 
@@ -78,6 +84,37 @@ export const verifyEmail = async (req, res) => {
 
     res.json({ message: 'Email verified successfully! You can now login.' })
 
+  } catch (error) {
+    res.status(500).json({ message: error.message })
+  }
+}
+
+
+// @desc Resend OTP
+// @route POST /api/auth/resend-otp
+export const resendOTP = async (req, res) => {
+  try {
+    const { email } = req.body
+
+    const user = await User.findOne({ email, isVerified: false })
+    if (!user) {
+      return res.status(400).json({ message: 'User not found or already verified' })
+    }
+
+    const verificationOTP = generateOTP()
+    const verificationOTPExpires = Date.now() + 5 * 60 * 1000
+    const verificationToken = crypto.randomBytes(32).toString('hex')
+    const verificationTokenExpires = Date.now() + 30 * 60 * 1000
+
+    user.verificationOTP = verificationOTP
+    user.verificationOTPExpires = verificationOTPExpires
+    user.verificationToken = verificationToken
+    user.verificationTokenExpires = verificationTokenExpires
+    await user.save()
+
+    await sendVerificationEmail(email, user.name, verificationToken, verificationOTP)
+
+    res.json({ message: 'New OTP sent! Please check your email.' })
   } catch (error) {
     res.status(500).json({ message: error.message })
   }
