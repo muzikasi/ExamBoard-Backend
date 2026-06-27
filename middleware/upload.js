@@ -13,10 +13,14 @@ cloudinary.v2.config({
 
 const storage = new CloudinaryStorage({
   cloudinary: cloudinary.v2,
-  params: {
-    folder: 'examboard',
-    allowed_formats: ['jpg', 'jpeg', 'png', 'pdf'],
-    resource_type: 'auto',
+  params: async (req, file) => {
+    return {
+      folder: 'examboard',
+      allowed_formats: ['jpg', 'jpeg', 'png', 'pdf'],
+      resource_type: file.mimetype === 'application/pdf' ? 'raw' : 'image',
+      type: 'upload',
+      access_mode: 'public',
+    }
   },
 })
 
@@ -32,7 +36,7 @@ const fileFilter = (req, file, cb) => {
 const upload = multer({
   storage,
   fileFilter,
-  limits: { fileSize: 7 * 1024 * 1024 }
+  limits: { fileSize: 10 * 1024 * 1024 }
 })
 
 export default upload

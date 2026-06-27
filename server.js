@@ -13,19 +13,24 @@ dotenv.config()
 
 const app = express()
 
-// Fix __dirname for ES Modules
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-// Connect to MongoDB
 connectDB()
 
 // Middleware
-app.use(cors())
+app.use(cors({
+  origin: ['http://localhost:5173', 'http://localhost:3000'],
+  credentials: true
+}))
 app.use(express.json())
 
-// Serve uploaded files statically
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')))
+// Serve uploaded files with CORS headers so react-pdf can load them
+app.use('/uploads', (req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*')
+  res.header('Cross-Origin-Resource-Policy', 'cross-origin')
+  next()
+}, express.static(path.join(__dirname, 'uploads')))
 
 // Routes
 app.use('/api/auth', authRoutes)
@@ -33,7 +38,6 @@ app.use('/api/materials', materialRoutes)
 app.use('/api/bookmarks', bookmarkRoutes)
 app.use('/api/admin', adminRoutes)
 
-// Test route
 app.get('/', (req, res) => {
   res.json({ message: 'Exam Prep Board API is running!' })
 })
