@@ -1,5 +1,4 @@
 import Material from '../models/Material.js'
-import cloudinary from 'cloudinary'
 
 // @desc Get all materials (with search and filter)
 // @route GET /api/materials
@@ -46,23 +45,31 @@ export const getMaterial = async (req, res) => {
   }
 }
 
+const noteTypes = ['Study tips', 'Summary notes']
+
 // @desc Upload new material
 // @route POST /api/materials
 export const createMaterial = async (req, res) => {
   try {
-    const { title, subject, year, type } = req.body
+    let { title, subject, year, type, grade } = req.body
 
     if (!req.file) {
       return res.status(400).json({ message: 'Please upload a file' })
     }
 
+    if (noteTypes.includes(type)) {
+      grade = null
+      year = { ec: null, gc: null }
+    }
+
     const fileType = req.file.mimetype === 'application/pdf' ? 'pdf' : 'image'
-    const fileUrl = req.file.path  // Cloudinary URL
+    const fileUrl = req.file.path || req.file.secure_url || ''
 
     const material = await Material.create({
       title,
       subject,
       year,
+      grade,
       type,
       fileUrl,
       fileType,
@@ -89,11 +96,21 @@ export const updateMaterial = async (req, res) => {
       return res.status(403).json({ message: 'Not authorized to update this material' })
     }
 
-    const updated = await Material.findByIdAndUpdate(
-      req.params.id,
-      req.body,
-      { new: true }
-    )
+    const updateData = { ...req.body }
+    const effectiveType = updateData.type || material.type
+
+    if (noteTypes.includes(effectiveType)) {
+      updateData.grade = null
+      updateData.year = { ec: null, gc: null }
+    }
+
+    if (req.file) {
+      updateData.fileUrl = req.file.path || req.file.secure_url || ''
+      updateData.fileType = req.file.mimetype === 'application/pdf' ? 'pdf' : 'image'
+    }
+
+    material.set(updateData)
+    const updated = await material.save()
 
     res.json(updated)
   } catch (error) {
@@ -116,11 +133,6 @@ export const deleteMaterial = async (req, res) => {
       req.user.role !== 'admin'
     ) {
       return res.status(403).json({ message: 'Not authorized to delete this material' })
-    }
-
-    // Delete file from Cloudinary
-    if (req.file && req.file.filename) {
-      await cloudinary.v2.uploader.destroy(req.file.filename)
     }
 
     await material.deleteOne()

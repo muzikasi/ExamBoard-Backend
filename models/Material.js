@@ -16,11 +16,23 @@ const materialSchema = new mongoose.Schema({
   year: {
     ec: {
       type: Number,
-      required: true
+      required: function() {
+        return this.type === 'Past exam question'
+      }
     },
     gc: {
       type: Number,
-      required: true
+      required: function() {
+        return this.type === 'Past exam question'
+      }
+    }
+  },
+
+  grade: {
+    type: String,
+    enum: ['grade 9', 'grade 10', 'grade 11', 'grade 12', 'university student'],
+    required: function() {
+      return this.type === 'Past exam question'
     }
   },
 
@@ -53,6 +65,5 @@ const materialSchema = new mongoose.Schema({
   }]
 
 }, { timestamps: true })
-
 
 export default mongoose.model('Material', materialSchema)

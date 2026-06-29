@@ -15,7 +15,7 @@ const router = express.Router()
 router.get('/', getMaterials)
 router.get('/:id', getMaterial)
 router.post('/', protect, upload.single('file'), createMaterial)
-router.put('/:id', protect, updateMaterial)
+router.put('/:id', protect, upload.single('file'), updateMaterial)
 router.delete('/:id', protect, deleteMaterial)
 router.put('/:id/upvote', protect, upvoteMaterial)
 

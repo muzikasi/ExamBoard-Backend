@@ -1,27 +1,35 @@
 import multer from 'multer'
+import { v2 as cloudinary } from 'cloudinary'
 import { CloudinaryStorage } from 'multer-storage-cloudinary'
-import cloudinary from 'cloudinary'
 import dotenv from 'dotenv'
 
 dotenv.config()
 
-cloudinary.v2.config({
+cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
+  api_secret: process.env.CLOUDINARY_API_SECRET
 })
 
+const getFolder = (req, file) => {
+  if (file.fieldname === 'photo') {
+    return 'exam-prep/profiles'
+  }
+
+  if (req.baseUrl && req.baseUrl.includes('/books')) {
+    return 'exam-prep/books'
+  }
+
+  return 'exam-prep/materials'
+}
+
 const storage = new CloudinaryStorage({
-  cloudinary: cloudinary.v2,
-  params: async (req, file) => {
-    return {
-      folder: 'examboard',
-      allowed_formats: ['jpg', 'jpeg', 'png', 'pdf'],
-      resource_type: file.mimetype === 'application/pdf' ? 'raw' : 'image',
-      type: 'upload',
-      access_mode: 'public',
-    }
-  },
+  cloudinary,
+  params: async (req, file) => ({
+    folder: getFolder(req, file),
+    resource_type: 'auto',
+    public_id: `${Date.now()}-${file.originalname.replace(/\s+/g, '-')}`
+  })
 })
 
 const fileFilter = (req, file, cb) => {
@@ -36,7 +44,7 @@ const fileFilter = (req, file, cb) => {
 const upload = multer({
   storage,
   fileFilter,
-  limits: { fileSize: 10 * 1024 * 1024 }
+  limits: { fileSize: 50 * 1024 * 1024 }
 })
 
 export default upload

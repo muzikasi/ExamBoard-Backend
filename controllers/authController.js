@@ -1,8 +1,8 @@
 import User from '../models/User.js'
-import bcrypt from 'bcryptjs'
+import bcrypt from 'bcrypt'
 import jwt from 'jsonwebtoken'
 import crypto from 'crypto'
-import { sendVerificationEmail } from '../utils/email.js'
+import { sendVerificationEmail, sendPasswordResetEmail } from '../utils/email.js'
 
 // Generate JWT token
 const generateToken = (id) => {
@@ -18,7 +18,18 @@ const generateOTP = () => {
 // @route POST /api/auth/register
 export const register = async (req, res) => {
   try {
-    const { name, email, password } = req.body
+    const { firstName, lastName, email, password, grade } = req.body
+
+    const allowedGrades = ['grade 9', 'grade 10', 'grade 11', 'grade 12', 'university student']
+    if (!grade || !allowedGrades.includes(grade)) {
+      return res.status(400).json({ message: 'Please provide a valid grade (grade 9, grade 10, grade 11, grade 12, university student)' })
+    }
+
+    if (!firstName || !lastName) {
+      return res.status(400).json({ message: 'Please provide both firstName and lastName' })
+    }
+
+    const name = `${firstName.trim()} ${lastName.trim()}`
 
     const userExists = await User.findOne({ email })
     if (userExists) {
@@ -35,8 +46,11 @@ export const register = async (req, res) => {
 
     const user = await User.create({
       name,
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
       email,
       password: hashedPassword,
+      grade,
       verificationToken,
       verificationTokenExpires,
       verificationOTP,
@@ -189,6 +203,166 @@ export const getProfile = async (req, res) => {
   try {
     const user = await User.findById(req.user._id).select('-password')
     res.json(user)
+  } catch (error) {
+    res.status(500).json({ message: error.message })
+  }
+}
+
+// @desc Update profile info
+// @route PUT /api/auth/profile
+export const updateProfile = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id)
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' })
+    }
+
+    const { firstName, lastName, name, grade } = req.body
+    const allowedGrades = ['grade 9', 'grade 10', 'grade 11', 'grade 12', 'university student']
+
+    if (firstName && firstName.trim()) {
+      user.firstName = firstName.trim()
+    }
+
+    if (lastName && lastName.trim()) {
+      user.lastName = lastName.trim()
+    }
+
+    if (name && name.trim()) {
+      user.name = name.trim()
+    } else if (user.firstName || user.lastName) {
+      user.name = `${user.firstName || ''} ${user.lastName || ''}`.trim()
+    }
+
+    if (grade && allowedGrades.includes(grade)) {
+      user.grade = grade
+    }
+
+    if (req.file) {
+      user.photo = req.file.path || req.file.secure_url || ''
+    }
+
+    await user.save()
+
+    const safeUser = await User.findById(user._id).select('-password')
+    const photoUrl = safeUser.photo || ''
+    const userResponse = {
+      ...safeUser.toObject(),
+      photo: photoUrl,
+      avatar: photoUrl,
+      photoUrl: photoUrl
+    }
+
+    res.json(userResponse)
+  } catch (error) {
+    res.status(500).json({ message: error.message })
+  }
+}
+
+// @desc Change password
+// @route POST /api/auth/change-password
+export const changePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ message: 'Please provide current and new passwords' })
+    }
+
+    const user = await User.findById(req.user._id)
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' })
+    }
+
+    const isMatch = await bcrypt.compare(currentPassword, user.password)
+    if (!isMatch) {
+      return res.status(400).json({ message: 'Current password is incorrect' })
+    }
+
+    const salt = await bcrypt.genSalt(10)
+    const hashedPassword = await bcrypt.hash(newPassword, salt)
+
+    user.password = hashedPassword
+    await user.save()
+
+    res.json({ message: 'Password updated successfully' })
+  } catch (error) {
+    res.status(500).json({ message: error.message })
+  }
+}
+
+// @desc Request password reset
+// @route POST /api/auth/forgot-password
+export const forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body
+
+    if (!email) {
+      return res.status(400).json({ message: 'Please provide an email address' })
+    }
+
+    const user = await User.findOne({ email })
+    if (!user) {
+      // For security, don't reveal if email exists
+      return res.json({ message: 'If an account with that email exists, you will receive password reset instructions.' })
+    }
+
+    const resetCode = Math.floor(100000 + Math.random() * 900000).toString()
+    const resetPasswordCodeExpires = Date.now() + 15 * 60 * 1000 // 15 minutes
+
+    user.resetPasswordCode = resetCode
+    user.resetPasswordCodeExpires = resetPasswordCodeExpires
+    await user.save()
+
+    await sendPasswordResetEmail(email, user.name, resetCode)
+
+    res.json({ message: 'Password reset instructions have been sent to your email.' })
+
+  } catch (error) {
+    res.status(500).json({ message: error.message })
+  }
+}
+
+// @desc Reset password with verification code
+// @route POST /api/auth/reset-password
+export const resetPassword = async (req, res) => {
+  try {
+    const { email, resetCode, newPassword, confirmPassword } = req.body
+
+    if (!email || !resetCode || !newPassword || !confirmPassword) {
+      return res.status(400).json({ message: 'Please provide all required fields' })
+    }
+
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({ message: 'Passwords do not match' })
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ message: 'Password must be at least 6 characters long' })
+    }
+
+    const user = await User.findOne({
+      email,
+      resetPasswordCode: resetCode,
+      resetPasswordCodeExpires: { $gt: Date.now() }
+    })
+
+    if (!user) {
+      return res.status(400).json({ message: 'Invalid reset code or code has expired' })
+    }
+
+    // Hash the new password
+    const salt = await bcrypt.genSalt(10)
+    const hashedPassword = await bcrypt.hash(newPassword, salt)
+
+    user.password = hashedPassword
+    user.resetPasswordCode = undefined
+    user.resetPasswordCodeExpires = undefined
+    await user.save()
+
+    res.json({ message: 'Password has been reset successfully. You can now login with your new password.' })
+
   } catch (error) {
     res.status(500).json({ message: error.message })
   }

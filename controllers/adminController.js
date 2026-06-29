@@ -1,6 +1,5 @@
 import User from '../models/User.js'
 import Material from '../models/Material.js'
-import fs from 'fs'
 
 // @desc Get all users
 // @route GET /api/admin/users
@@ -55,11 +54,6 @@ export const deleteMaterial = async (req, res) => {
 
     if (!material) {
       return res.status(404).json({ message: 'Material not found' })
-    }
-
-    const filePath = `.${material.fileUrl}`
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath)
     }
 
     await material.deleteOne()
