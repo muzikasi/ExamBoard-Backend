@@ -176,8 +176,25 @@ export const login = async (req, res) => {
     }
 
     if (!user.isVerified) {
-      return res.status(400).json({ message: 'Please verify your email before logging in' })
-    }
+  const verificationOTP = generateOTP()
+  const verificationOTPExpires = Date.now() + 5 * 60 * 1000
+  const verificationToken = crypto.randomBytes(32).toString('hex')
+  const verificationTokenExpires = Date.now() + 30 * 60 * 1000
+
+  user.verificationOTP = verificationOTP
+  user.verificationOTPExpires = verificationOTPExpires
+  user.verificationToken = verificationToken
+  user.verificationTokenExpires = verificationTokenExpires
+  await user.save()
+
+  await sendVerificationEmail(user.email, user.name, verificationToken, verificationOTP)
+
+  return res.status(403).json({
+    message: 'Your account is not verified. We sent a new verification code to your email.',
+    needsVerification: true,
+    email: user.email
+  })
+}
 
     const isMatch = await bcrypt.compare(password, user.password)
     if (!isMatch) {
